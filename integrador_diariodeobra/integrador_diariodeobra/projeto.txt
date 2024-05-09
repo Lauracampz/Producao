@@ -1,0 +1,811 @@
+├── producao
+    ├── env
+    ├── scripts
+        ├── __pycache__
+        ├── integrador_diariodeobra.py:
+import multiprocessing
+import os
+workers = multiprocessing.cpu_count()  * 2 + 1
+threads = multiprocessing.cpu_count()  * 2
+timeout = 3000
+errorlog = '-'
+loglevel = 'info'
+bind='127.0.0.1:8001'
+pidfile='/tmp/integrador_diariodeobra.pid'
+    ├── integrador_diariodeobra
+        ├── apps
+            ├── obras
+                ├── admin
+                    ├── _pycache_
+                        ├── _init_.cpython-38.pyc
+                        ├── obras.cpython-38.pyc
+                    ├──  _init_.py
+                    ├── obras.py:from ..models import Obras, Atividade, ObraFuncao, ObraEquipamento, ObraMaterial, Material, Unidade
+from cruds_adminlte import crud_admin
+from cruds_adminlte.crud.crud_view import CRUDView
+from cruds_adminlte.crud.inline_crud import InlineAjaxCRUD
+
+
+class Atividade_AjaxCRUD(InlineAjaxCRUD):
+    base_model = Obras
+    model = Atividade
+    inline_field = 'obra'
+    title = 'Atividades'
+    paginate_by = None
+    list_fields = 'nome', 'unidade', 'qtde', 'preco',
+    fields = 'nome',  'unidade', 'qtde', 'preco',
+    views_available = ['list', 'delete', 'update']
+
+
+class Funcao_AjaxCRUD(InlineAjaxCRUD):
+    base_model = Obras
+    model = ObraFuncao
+    inline_field = 'obra'
+    title = 'Funções'
+    paginate_by = None
+    list_fields = 'funcao', 'unidade', 'qtde', 'preco',
+    fields = 'funcao', 'unidade', 'qtde', 'preco',
+
+
+class ObraEquipamento_AjaxCRUD(InlineAjaxCRUD):
+    base_model = Obras
+    model = ObraEquipamento
+    inline_field = 'obra'
+    title = 'Equipamentos'
+    paginate_by = None
+    list_fields = 'equipamento', 'unidade', 'qtde', 'preco',
+    fields = 'equipamento', 'unidade', 'qtde', 'preco',
+
+
+class ObraMaterial_AjaxCRUD(InlineAjaxCRUD):
+    base_model = Obras
+    model = ObraMaterial
+    inline_field = 'obra'
+    title = 'Materiais'
+    paginate_by = None
+    list_fields = 'material', 'unidade', 'qtde', 'preco',
+    fields = 'material', 'unidade', 'qtde', 'preco',
+
+
+@crud_admin.register()
+class ObrasAdmin(CRUDView):
+    inlines = [Atividade_AjaxCRUD, Funcao_AjaxCRUD, ObraEquipamento_AjaxCRUD, ObraMaterial_AjaxCRUD]
+    list_fields = 'id', 'nome',
+    search_fields = ['nome__icontains']
+    model = Obras
+    views_available = ['list', 'delete', 'update']
+    fields = 'nome',
+
+
+@crud_admin.register()
+class MaterialAdmin(CRUDView):
+    list_fields = 'id', 'nome',
+    search_fields = ['nome__icontains']
+    model = Material
+    fields = 'nome',
+
+
+@crud_admin.register()
+class UnidadeAdmin(CRUDView):
+    list_fields = 'id', 'nome',
+    search_fields = ['nome__icontains']
+    model = Unidade
+    fields = 'nome',
+
+                ├── api
+                    ├── _pycache_
+                        ├── _init_.cpython-38.pyc
+                    ├──  serializers
+                        ├── _pycache_
+                            ├── atividade.cpython-38.pyc
+                            ├── _init_.cpython-38.pyc
+                            ├── obra.cpython-38.pyc
+                            ├── relatorio.cpython-38.pyc
+                            ├── resumo.cpython-38.pyc
+                        ├── atividade.py: from rest_framework import serializers
+from ...models import Atividade
+
+
+class AtividadeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Atividade
+        fields = ()
+
+    def to_representation(self, instance):
+        ret = super(AtividadeSerializer, self).to_representation(instance)
+        ret.update(instance.json)
+        ret.update({
+            'qtde': instance.qtde,
+            'preco': instance.preco,
+            'unidade': None if not instance.unidade else instance.unidade.nome
+        })
+        return ret
+                        ├──  _init_.py
+                        ├──  obra.py: from rest_framework import serializers
+from ...models import Obras, ObraFuncao, ObraMaterial, ObraEquipamento, Atividade
+from django.utils import timezone
+from .atividade import AtividadeSerializer
+
+class ObraFuncaoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ObraFuncao
+        fields = ('funcao', 'qtde', 'preco', 'unidade')
+
+    funcao = serializers.SerializerMethodField()
+
+    unidade = serializers.SerializerMethodField()
+
+    def get_unidade(self, obj):
+        return obj.unidade.nome
+
+    def get_funcao(self, obj):
+        return obj.funcao.nome
+
+
+class ObraEquipamentoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ObraEquipamento
+        fields = ('equipamento',  'qtde', 'preco', 'unidade')
+
+    equipamento = serializers.SerializerMethodField()
+
+    unidade = serializers.SerializerMethodField()
+
+    def get_unidade(self, obj):
+        return obj.unidade.nome
+
+
+    def get_equipamento(self, obj):
+        return {'_id': obj.equipamento.remote_id, 'nome': obj.equipamento.nome}
+
+
+class ObraMaterialSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ObraMaterial
+        fields = ('material', 'qtde', 'preco', 'unidade')
+
+    unidade = serializers.SerializerMethodField()
+
+    material = serializers.SerializerMethodField()
+
+    def get_material(self, obj):
+        return obj.material.nome
+
+    def get_unidade(self, obj):
+        return obj.unidade.nome
+
+
+class ObrasSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Obras
+        fields = ()
+
+    def to_representation(self, instance):
+        ret = super(ObrasSerializer, self).to_representation(instance)
+        ret.update(instance.json)
+        previsao = {
+            'funcao': ObraFuncaoSerializer(instance.obrafuncao_set.all(), many=True).data,
+            'equipamento': ObraEquipamentoSerializer(instance.obraequipamento_set.all(), many=True).data,
+            'material': ObraMaterialSerializer(instance.obramaterial_set.all(), many=True).data,
+            'atividade': AtividadeSerializer(instance.atividade_set.all(), many=True).data
+        }
+
+        ret.update({
+            'previsao': previsao
+        })
+        return ret
+                        ├── relatorio.py: from rest_framework import serializers
+from ...models import Relatorio
+from django.utils import timezone
+
+
+class RelatorioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Relatorio
+        fields = ('obra_id',)
+
+    obra_id = serializers.SerializerMethodField()
+
+    def get_obra_id(self, obj):
+        return obj.obra.json['_id']
+
+    def to_representation(self, instance):
+        ret = super(RelatorioSerializer, self).to_representation(instance)
+        ret.update(instance.json)
+        ret.update(instance.detalhes)
+        return ret
+                        ├── resumo.py:from rest_framework import serializers
+from ...models import Resumo
+from django.utils import timezone
+
+
+class ResumoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Resumo
+        fields = ('id',
+                  'data',
+                  'totais')
+
+    totais = serializers.SerializerMethodField()
+    data = serializers.SerializerMethodField()
+
+    def get_totais(self, obj):
+        return obj.json
+
+    def get_data(self, obj):
+        return timezone.localtime(obj.data).strftime('%d/%m/%Y %H:%M')
+                    ├──  views
+                        ├── _pycache_
+                            ├── atividade.cpython-38.pyc
+                            ├── _init_.cpython-38.pyc
+                            ├── obra.cpython-38.pyc
+                            ├── relatorio.cpython-38.pyc
+                            ├── resumo.cpython-38.pyc
+                        ├── atividade.py:from rest_framework.viewsets import GenericViewSet
+from ...models import Atividade
+from ..serializers import AtividadeSerializer
+from rest_framework import mixins
+
+
+class AtividadeViewSet(mixins.ListModelMixin, GenericViewSet):
+    serializer_class = AtividadeSerializer
+    model_class = Atividade
+
+    def get_queryset(self):
+        return self.model_class.objects.all().select_related('obra')
+                        ├──  _init_.py
+                        ├──  obra.py:from rest_framework.viewsets import GenericViewSet
+from ...models import Obras, ObraFuncao, ObraMaterial, ObraEquipamento, Atividade
+from ..serializers import ObrasSerializer
+from rest_framework import mixins
+from django.db.models import Prefetch
+from django.db.models import Q
+
+
+class ObrasViewSet(mixins.ListModelMixin, GenericViewSet):
+    serializer_class = ObrasSerializer
+    model_class = Obras
+
+    def get_queryset(self):
+        return self.model_class.objects.all().prefetch_related(
+            Prefetch('obrafuncao_set', queryset=ObraFuncao.objects.select_related('funcao')),
+            Prefetch('obramaterial_set', queryset=ObraMaterial.objects.select_related('material')),
+            Prefetch('obraequipamento_set', queryset=ObraEquipamento.objects.select_related('equipamento')),
+            Prefetch('atividade_set', queryset=Atividade.objects.filter(Q(qtde__gt=0) |
+                                                                        Q(preco__gt=0))),)
+                        ├── relatorio.py: from rest_framework.viewsets import GenericViewSet
+from ...models import Relatorio
+from ..serializers import RelatorioSerializer
+from rest_framework import mixins
+
+
+class RelatorioViewSet(mixins.ListModelMixin, GenericViewSet):
+    serializer_class = RelatorioSerializer
+    model_class = Relatorio
+
+    def get_queryset(self):
+        return self.model_class.objects.all().select_related('obra')
+                        ├── resumo.py: from rest_framework.viewsets import GenericViewSet
+from ...models import Resumo
+from ..serializers import ResumoSerializer
+from rest_framework import mixins
+
+
+class ResumoViewSet(mixins.ListModelMixin, GenericViewSet):
+    serializer_class = ResumoSerializer
+    model_class = Resumo
+
+    def get_queryset(self):
+        return self.model_class.objects.all()
+                    ├──  _init_.py
+                ├── migrations
+                    ├── _pycache_
+                        ├── 0001_initial.cpython-38.pyc
+                        ├── 0002_obras.cpython-38.pyc
+                        ├── 0003_obras_nome.cpython-38.pyc
+                        ├── 0004_auto_20210528_1859.cpython-38.pyc
+                        ├── 0005_auto_20210528_1927.cpython-38.pyc
+                        ├── 0006_atividade.cpython-38.pyc
+                        ├── 0007_auto_20210529_1235.cpython-38.pyc
+                        ├── 0008_funcao.cpython-38.pyc
+                        ├── 0009_obrafuncao.cpython-38.pyc
+                        ├── 0010_equipamento_obraequipamento.cpython-38.pyc
+                        ├── 0011_material_obramaterial.cpython-38.pyc
+                        ├── 0012_auto_20210609_1041.cpython-38.pyc
+                        ├── 0013_auto_20210609_1042.cpython-38.pyc
+                        ├── _init_.cpython-38.pyc
+                    ├──  0001_initial.py
+                    ├──  0002_obras.py
+                    ├──  0003_obras_nome.py
+                    ├──  0004_auto_20210528_1859.py
+                    ├──  0005_auto_20210528_1927.py
+                    ├──  0006_atividade.py
+                    ├──  0007_auto_20210529_1235.py
+                    ├──  0008_funcao.py
+                    ├──  0009_obrafuncao.py
+                    ├──  0010_equipamento_obraequipamento.py
+                    ├──  0011_material_obramaterial.py
+                    ├──  0012_auto_20210609_1041.py
+                    ├──  0013_auto_20210609_1042.py
+                    ├──  _init_.py
+                ├── models
+                    ├── __pycache__
+                    ├── atividades.py: from django.db import models
+from .unidade import Unidade
+
+class Atividade(models.Model):
+    nome = models.CharField(max_length=200)
+    remote_id = models.CharField(max_length=200, db_index=True)
+    obra = models.ForeignKey('obras.Obras',
+                             on_delete=models.CASCADE)
+    json = models.JSONField()
+
+    unidade = models.ForeignKey(Unidade,
+                                null=True,
+                                on_delete=models.SET_NULL)
+
+    qtde = models.DecimalField('Quantidade',
+                               decimal_places=2,
+                               max_digits=15,
+                               default=0)
+
+    preco = models.DecimalField('Preço',
+                               decimal_places=2,
+                               max_digits=15,
+                               default=0)
+
+
+    def __str__(self):
+        return str(self.id)
+                    ├── equipamento.py: from django.db import models
+
+
+class Equipamento(models.Model):
+    nome = models.CharField(max_length=200)
+    remote_id = models.CharField(max_length=200, db_index=True)
+
+    def __str__(self):
+        return str(self.nome)
+                    ├── funcao.py: from django.db import models
+
+
+class Funcao(models.Model):
+    nome = models.CharField(max_length=200)
+
+    def __str__(self):
+        return str(self.nome)
+                    ├── __init__.py
+                    ├── material.py: from django.db import models
+
+
+class Material(models.Model):
+    nome = models.CharField(max_length=200)
+
+    def __str__(self):
+        return str(self.nome)
+                    ├── obra.py: from django.db import models
+from .funcao import Funcao
+from .equipamento import Equipamento
+from .material import Material
+from .unidade import Unidade
+
+
+class Obras(models.Model):
+    class Meta:
+        ordering = 'nome',
+        verbose_name = 'Obra'
+        verbose_name_plural = 'Obras'
+    nome = models.CharField(max_length=200)
+    json = models.JSONField()
+    remote_id = models.CharField(max_length=200, db_index=True)
+
+    def __str__(self):
+        return str(self.id)
+
+
+class ObraFuncao(models.Model):
+    class Meta:
+        ordering = 'funcao__nome',
+        verbose_name = 'Função'
+        verbose_name_plural = 'Funções'
+        unique_together = ('obra', 'funcao')
+
+    obra = models.ForeignKey(Obras,
+                             on_delete=models.CASCADE)
+
+    funcao = models.ForeignKey(Funcao,
+                               on_delete=models.CASCADE,
+                               verbose_name='Funcão')
+
+    unidade = models.ForeignKey(Unidade,
+                                null=True,
+                                on_delete=models.SET_NULL)
+
+    qtde = models.DecimalField('Quantidade',
+                               decimal_places=2,
+                               max_digits=15,
+                               default=0)
+
+    preco = models.DecimalField('Preço',
+                               decimal_places=2,
+                               max_digits=15,
+                               default=0)
+
+
+class ObraEquipamento(models.Model):
+    class Meta:
+        ordering = 'equipamento__nome',
+        verbose_name = 'Equipamento'
+        verbose_name_plural = 'Equipamentos'
+        unique_together = ('obra', 'equipamento')
+
+    obra = models.ForeignKey(Obras,
+                             on_delete=models.CASCADE)
+
+    equipamento = models.ForeignKey(Equipamento,
+                               on_delete=models.CASCADE,
+                               verbose_name='Equipamento')
+
+    unidade = models.ForeignKey(Unidade,
+                                null=True,
+                                on_delete=models.SET_NULL)
+
+    qtde = models.DecimalField('Quantidade',
+                               decimal_places=2,
+                               max_digits=15,
+                               default=0)
+
+    preco = models.DecimalField('Preço',
+                               decimal_places=2,
+                               max_digits=15,
+                               default=0)
+
+
+class ObraMaterial(models.Model):
+    class Meta:
+        ordering = 'material__nome',
+        verbose_name = 'Material'
+        verbose_name_plural = 'Materiais'
+        unique_together = ('obra', 'material')
+
+    obra = models.ForeignKey(Obras,
+                             on_delete=models.CASCADE)
+
+    material = models.ForeignKey(Material,
+                                 on_delete=models.CASCADE,
+                                 verbose_name='Material')
+
+    unidade = models.ForeignKey(Unidade,
+                                null=True,
+                                on_delete=models.SET_NULL)
+
+    qtde = models.DecimalField('Quantidade',
+                               decimal_places=2,
+                               max_digits=15,
+                               default=0)
+
+    preco = models.DecimalField('Preço',
+                               decimal_places=2,
+                               max_digits=15,
+                               default=0)
+                    ├── relatorio.py: from django.db import models
+
+
+class Relatorio(models.Model):
+    obra = models.ForeignKey('Obras',
+                             on_delete=models.CASCADE)
+    json = models.JSONField()
+    detalhes = models.JSONField()
+    remote_id = models.CharField(max_length=200, db_index=True)
+
+    def __str__(self):
+        return str(self.id)
+                    ├── resumo.py: from django.db import models
+
+
+class Resumo(models.Model):
+    data = models.DateTimeField(auto_now=True)
+    json = models.JSONField()
+
+    def __str__(self):
+        return str(self.id)
+                    ├── unidade.py: from django.db import models
+
+
+class Unidade(models.Model):
+    nome = models.CharField(max_length=200)
+
+    def __str__(self):
+        return str(self.nome)
+                ├──  _pycache_
+                ├── tasks
+                    ├──__pycache__
+                    ├── importar.py: import requests
+import logging
+from celery import shared_task
+from apps.obras.models import Resumo, Obras, Relatorio, Atividade, Funcao, Equipamento
+
+# Configuração do logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@shared_task(name='importar')
+def importar():
+    # header
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.72 Safari/537.36',
+        'token': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3MDA2NzQ3ODQsImp0aSI6IjBkOGNhYzRkOWI4MTMwZjZjNTY0MDA5ODZjMGNhYjYwN2M1MjkxMGVlZDE0MWRlNmNjZmFiOWE0YzVmZWFjYmIxYzIzODhiOSIsImNvZCI6IjcyZmE5YWY4M2E0MjQzNWVjMmQ0Y2NiOWU5NzFlMzE2MGI0YzkxNjQiLCJlbXByZXNhSWQiOiI2MDcyMjE1YTQxZTJmMDdhY2IzN2ZlYjIiLCJpc3MiOiJhcHAtYXBpIn0.yMQmEMlvBvdZXe6_X7lnV_gk5IJiN_dalEtxILXqfIg'
+    }
+
+    # obras
+    obras_url = 'https://apiexterna.diariodeobra.app/v1/obras'
+    logger.info(f"Fazendo solicitação para {obras_url}")
+    content = requests.get(obras_url, headers=headers).json()
+    logger.info(f"Resposta da API: {content}")
+
+    r = Resumo.objects.filter().first()
+    if not r:
+        r = Resumo()
+    r.json = content
+    r.save()
+
+    for o in content:
+        obj = Obras.objects.filter(remote_id=o['_id']).first()
+        if not obj:
+            obj = Obras()
+
+        # detalhe obra
+        det_obra_url = f"https://apiexterna.diariodeobra.app/v1/obras/{o['_id']}"
+        logger.info(f"Fazendo solicitação para {det_obra_url}")
+        detalhes_obra = requests.get(det_obra_url, headers=headers).json()
+        logger.info(f"Detalhes da obra: {detalhes_obra}")
+
+        obj.remote_id = o['_id']
+        obj.nome = o['nome']
+        obj.json = detalhes_obra
+        obj.save()
+
+        # cronograma
+        cronograma_url = f"https://apiexterna.diariodeobra.app/v1/obras/{o['_id']}/lista-de-tarefas"
+        logger.info(f"Fazendo solicitação para {cronograma_url}")
+        cronograma_content = requests.get(cronograma_url, headers=headers).json()
+        logger.info(f"Cronograma: {cronograma_content}")
+
+        for c in cronograma_content['cronograma']:
+            for t in c.get('tarefas', []):
+                a = Atividade.objects.filter(remote_id=t['_id']).first()
+                if not a:
+                    a = Atividade()
+                    a.remote_id = t['_id']
+                    a.obra = obj
+                a.nome = t['descricao']
+                a.json = t
+                a.save()
+
+        # relatorios
+        relatorios_url = f"https://apiexterna.diariodeobra.app/v1/obras/{o['_id']}/relatorios?limite=1000&ordem=desc"
+        logger.info(f"Fazendo solicitação para {relatorios_url}")
+        content = requests.get(relatorios_url, headers=headers).json()
+        logger.info(f"Relatórios: {content}")
+
+        for rel in content:
+            r = Relatorio.objects.filter(remote_id=rel['_id']).first()
+            if not r:
+                r = Relatorio()
+                r.obra = obj
+                r.remote_id = rel['_id']
+            r.json = rel
+            
+            # Obtendo os detalhes do relatório
+            detalhe_url = f"https://apiexterna.diariodeobra.app/v1/obras/{o['_id']}/relatorios/{rel['_id']}"
+            logger.info(f"Fazendo solicitação para {detalhe_url}")
+            json_detalhes = requests.get(detalhe_url, headers=headers).json()
+            logger.info(f"Detalhes do relatório: {json_detalhes}")
+            r.detalhes = json_detalhes
+            
+            r.save()
+
+        # Excluir relatórios que não estão mais presentes na API
+        Relatorio.objects.filter(obra=obj).exclude(remote_id__in=[r['_id'] for r in content]).delete()
+
+    # Você pode querer lidar com exceções e erros nas solicitações da API para robustez.
+
+
+                    ├── __init__.py
+                ├──  _init_.py
+            ├── _pycache_
+            ├── _init_.py
+        ├── deploy
+            ├── diariodeobras.pem
+            ├── fabfile.py: # -*- coding: utf-8 -*-
+import os
+from contextlib import contextmanager
+from fabric.api import *
+
+
+@contextmanager
+def source_virtualenv():
+    with prefix(env.virtualenv):
+        yield
+
+###################
+# INSTANCIAS
+######################################################
+
+
+def producao():
+    bdir = os.path.dirname(os.path.abspath(__file__))
+    env.hosts = ['34.236.134.247', ]
+    env.user = 'ubuntu'
+    # env.password = 'Jcz@2019Jcz@2019'
+    env.key_filename = os.path.join(bdir, 'diariodeobras.pem')
+    env.deploy_to = '/producao/integrador_diariodeobra/integrador_diariodeobra'
+    env.deploy_to_project = '%s/integrador_diariodeobra' % env.deploy_to
+    env.settings = '%s/deploy/producao/settings.py' % env.deploy_to
+    env.manage = 'python %s/manage.py' % env.deploy_to
+    env.website = 'http://diariodeobra.drbi.com.br/'
+    env.restart = 'kill -HUP `cat /tmp/integrador_diariodeobra.pid`; sudo supervisorctl restart all'
+    env.virtualenv = 'source /producao/integrador_diariodeobra/env/bin/activate'
+    env.ngnix_user = 'www-data'
+
+
+###################################################
+
+
+def default_env():
+    env.deploy_dir = '%s/deploy' % env.deploy_to
+
+
+def deploy():
+    """Run the appropriate tasks for deployment"""
+    with source_virtualenv():
+        default_env()
+        clean()
+        deploy_config()
+        migrate_and_syncdb()
+        static_files()
+        clean()
+        restart()
+        check()
+
+
+def deploy_config():
+    """replace all settings"""
+    sudo('mv -f %s %s' % (env.settings, env.deploy_to_project))
+
+
+def update():
+    with source_virtualenv():
+        sudo('cd %s; git config credential.helper store; git reset --hard; git pull;' % env.deploy_to)
+        sudo('cd %s; python -m pip install -r requirements.txt;' % env.deploy_to)
+
+
+def static_files():
+    """collect static files"""
+    sudo('%s %s' % (env.manage, 'collectstatic --noinput'))
+    sudo('cd /producao/integrador_diariodeobra/integrador_diariodeobra/integrador_diariodeobra; chown -R {}:{} staticfiles;'.format(env.ngnix_user, env.ngnix_user))
+
+
+def migrate_and_syncdb():
+    """syncdb"""
+    sudo('%s %s' % (env.manage, 'migrate'))
+
+
+def clean():
+    """remove compiled files"""
+    sudo('find %s -name \*.pyc | xargs rm -f ' % env.deploy_to_project)
+
+
+def restart():
+    """run e sudo command were failing so i tried this new feature and it worked properly"""
+    for c in env.restart.split(';'):
+        c = c.strip()
+        if c:
+            sudo(c)
+
+
+def check():
+    print('Checking site status...')
+    out = sudo('curl --silent -I "%s"' % env.website)
+    if '200 OK' in out:
+        print('\n\n\n\n\n\nLOOKS GOOD HERE! WEB SITE IS UP\n\n\n\n\n\n')
+    else:
+        print('\n\n\n\n\n\n\nNOT WORKING!!! ):\n\n\n\n\n\n')
+
+
+###########################################################
+# deploy at once
+#####################
+def go():
+    update()
+    deploy()
+        ├── integrador_diariodeobra
+            ├── __pycache__
+            ├── static
+            ├── staticfiles
+            ├── templates
+            ├── celery_settings.py
+            ├── cruds_config.py
+            ├── global_settings.py
+            ├── __init__.py
+            ├── pagination.py
+            ├── settings.py
+            ├── token_authentication.py
+            ├── urls.py: tegrador_diariodeobra URL Configuration
+
+The `urlpatterns` list routes URLs to views. For more information please see:
+    https://docs.djangoproject.com/en/2.2/topics/http/urls/
+Examples:
+Function views
+    1. Add an import:  from my_app import views
+    2. Add a URL to urlpatterns:  path('', views.home, name='home')
+Class-based views
+    1. Add an import:  from other_app.views import Home
+    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
+Including another URLconf
+    1. Import the include() function: from django.urls import include, path
+    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+"""
+from django.conf import settings
+from django.contrib import admin
+from django.urls import path, include
+from django.conf.urls.static import static
+from apps.obras.api import views as views_obras
+from rest_framework import routers
+from cruds_adminlte import crud_admin
+
+
+router = routers.DefaultRouter()
+
+# user django
+router.register('resumo', views_obras.ResumoViewSet, basename='api_resumo')
+router.register('obras', views_obras.ObrasViewSet, basename='api_obras')
+router.register('relatorio', views_obras.RelatorioViewSet, basename='api_relatorio')
+# router.register('atividade', views_obras.AtividadeViewSet, basename='api_atividade')
+urlpatterns = [
+    path('avancado/', admin.site.urls),
+    path('', include(crud_admin.site.urls)),
+    path('api/v1/', include(router.urls)),
+]
+
+if settings.DEBUG:
+    urlpatterns + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) \
+                   + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+            ├── wsgi.py: """
+WSGI config for integrador_diariodeobra project.
+
+It exposes the WSGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/2.2/howto/deployment/wsgi/
+"""
+
+import os
+
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'integrador_diariodeobra.settings')
+
+application = get_wsgi_application()
+        ├── manage.py: #!/usr/bin/env python3
+"""Django's command-line utility for administrative tasks."""
+import os
+import sys
+
+
+def main():
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'integrador_diariodeobra.settings')
+    try:
+        from django.core.management import execute_from_command_line
+    except ImportError as exc:
+        raise ImportError(
+            "Couldn't import Django. Are you sure it's installed and "
+            "available on your PYTHONPATH environment variable? Did you "
+            "forget to activate a virtual environment?"
+        ) from exc
+    execute_from_command_line(sys.argv)
+
+
+if __name__ == '__main__':
+    main()
+        └── readme.md
